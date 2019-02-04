@@ -26,6 +26,8 @@ typedef struct _modelTrap_tilde
 	t_object x_obj;
 	t_float gamma;
 	t_float zeta;
+	t_float gamma_prev; // for interpolation
+	t_float zeta_prev;
 	t_int fe; // sampling frequency
 	t_float L; // length of resonator
 	t_float R; // radius of resonator
@@ -47,19 +49,19 @@ t_int *modelTrap_tilde_perform(t_int *w)
 	t_sample *out = (t_sample *)(w[2]);
 	int n = (int)(w[3]);
 
-	double gamma = x->gamma; // for readability
-	double zeta = x->zeta;
-
-	// calculation of parameters with current gamma, zeta
-	//double F0 = zeta*(1-gamma)*sqrt(gamma);
-    double A = zeta*(3*gamma-1)/(2*sqrt(gamma));
-    double B = -zeta*(3*gamma+1)/(8*pow(gamma,3./2));
-    double C = -zeta*(gamma+1)/(16*pow(gamma,5./2));
-
     double p1=x->p1, p2=x->p2, p1_old=x->p1;
     double Te = 1./x->fe, k1, k2;
+    t_float gamma_interp, zeta_interp;
 
 	for (int i = 0; i < n; i++) {
+		gamma_interp = x->gamma_prev + (double)i/n*(x->gamma - x->gamma_prev); // interpolation
+		zeta_interp = x->zeta_prev + (double)i/n*(x->zeta - x->zeta_prev); // interpolation
+
+		// calculation of parameters with current gamma, zeta
+    	double A = zeta_interp*(3*gamma_interp-1)/(2*sqrt(gamma_interp));
+    	double B = -zeta_interp*(3*gamma_interp+1)/(8*pow(gamma_interp,3./2));
+    	double C = -zeta_interp*(gamma_interp+1)/(16*pow(gamma_interp,5./2));
+
         p1 = p1 + Te*p2;
         k1 = -Te*(x->Cyl.Fn[0]*((x->Cyl.Yn[0]-A)
                   -2*B*p1_old-3*C*pow(p1_old,2))*p2
@@ -74,6 +76,9 @@ t_int *modelTrap_tilde_perform(t_int *w)
 	}
 	x->p1 = p1;
 	x->p2 = p2;
+
+	x->gamma_prev = x->gamma;
+	x->zeta_prev = x->zeta;
 
 	return (w+4);
 }
@@ -95,13 +100,15 @@ void *modelTrap_tilde_new(t_floatarg f1, t_floatarg f2)
 	t_modelTrap_tilde *x = (t_modelTrap_tilde *)pd_new(modelTrap_tilde_class);
 	x->gamma = f1;
 	x->zeta = f2;
+	x->gamma_prev = x->gamma;
+	x->zeta_prev = x->zeta;
 	x->fe = 44100;
 	x->L = 0.330; // 0.660
 	x->R = 0.007;
 	x->Cyl = impedance_cyl(x->L, x->R); // calculates resonator parameters
 
     char str[80];
-    sprintf(str, "%f", x->Cyl.Fn[0]); // print first eigenmode
+    sprintf(str, "%f", x->Cyl.fn[0]); // print first eigenmode
 	post(str);
 
 	// initialization
