@@ -14,8 +14,8 @@ function p1 = euler_1mode(gamma,zeta,time)
     
     p1 = zeros(time*fe,1); % p(t)
     p2 = p1; % p'(t)
-    p1(1) = F0/(1-A);
-    p2(1) = gamma/Te;
+    p1(1) = 0.0001; % initialization
+    
 
     for i = 1:time*fe-1
         p1(i+1) = p1(i) + Te*p2(i);
