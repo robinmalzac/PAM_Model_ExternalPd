@@ -8,6 +8,7 @@
 #define PI 3.14159265358979323846
 
 #define DISCR 1000 // size of arrays in impedance_cyl
+#define NMODES 3 // number of modes
 
 static t_class *modelEul_tilde_class;
 
@@ -31,8 +32,10 @@ typedef struct _modelEul_tilde
 	t_int fe; // sampling frequency
 	t_float L; // length of resonator
 	t_float R; // radius of resonator
-	double p1; // p(t)
-	double p2; // p'(t)
+	double p1 [NMODES]; // pn(t)
+	double p2 [NMODES]; // pn'(t)
+	double p1tot; // p(t) total
+	double p2tot; // p'(t) total
 	cylinder_params Cyl; // returns from impedance_cyl
 	t_inlet *x_in2;
 	t_outlet *x_out;
@@ -49,11 +52,14 @@ t_int *modelEul_tilde_perform(t_int *w)
 	t_sample *out = (t_sample *)(w[2]);
 	int n = (int)(w[3]);
 
-    double p1=x->p1, p2=x->p2, p1_old=x->p1;
     double Te = 1./x->fe;
+    double p1_old [NMODES];
+    for(int k=0 ; k<NMODES ; k++) {
+    	p1_old[k] = x->p1[k];
+    }
     t_float gamma_interp, zeta_interp;
 
-	for (int i = 0; i < n; i++){
+	for (int i=0; i<n; i++){
 		gamma_interp = x->gamma_prev + (double)i/n*(x->gamma - x->gamma_prev); // interpolation
 		zeta_interp = x->zeta_prev + (double)i/n*(x->zeta - x->zeta_prev); // interpolation
 
@@ -62,16 +68,24 @@ t_int *modelEul_tilde_perform(t_int *w)
     	double B = -zeta_interp*(3*gamma_interp+1)/(8*pow(gamma_interp,3./2));
     	double C = -zeta_interp*(gamma_interp+1)/(16*pow(gamma_interp,5./2));
 
-        p1 = p1 + Te*p2;
-        p2 = p2 - Te*(x->Cyl.Fn[0]*((x->Cyl.Yn[0]-A)
-                      -2*B*p1_old-3*C*pow(p1_old,2))*p2
-                      +pow(2*PI*x->Cyl.fn[0],2)*p1_old);
-        p1_old = p1;
+    	x->p1tot = 0;
+    	x->p2tot = 0;
 
-        out[i] = p1;
+    	for(int j=0 ; j<NMODES ; j++) {
+    		x->p1tot += x->p1[j];
+    		x->p2tot += x->p2[j];
+    	}
+
+    	for(int j=0 ; j<NMODES ; j++) {
+	        x->p1[j] = x->p1[j] + Te*x->p2[j];
+	        x->p2[j] = x->p2[j] - Te*(x->Cyl.Fn[j]*(x->Cyl.Yn[j]*x->p2[j]
+	        										-x->p2tot*(A+2*B*x->p1tot+3*C*pow(x->p1tot,2)))
+	        										+pow(2*PI*x->Cyl.fn[j],2)*p1_old[j]);
+	        p1_old[j] = x->p1[j];
+	    }
+
+        out[i] = x->p1tot/NMODES;
 	}
-	x->p1 = p1;
-	x->p2 = p2;
 
 	x->gamma_prev = x->gamma;
 	x->zeta_prev = x->zeta;
@@ -99,7 +113,7 @@ void *modelEul_tilde_new(t_floatarg f1, t_floatarg f2)
 	x->gamma_prev = x->gamma;
 	x->zeta_prev = x->zeta;
 	x->fe = 44100;
-	x->L = 0.330; // 0.660
+	x->L = 0.660;
 	x->R = 0.007;
 	x->Cyl = impedance_cyl(x->L, x->R); // calculates resonator parameters
 
@@ -108,11 +122,12 @@ void *modelEul_tilde_new(t_floatarg f1, t_floatarg f2)
 	post(str);
 
 	// initialization
-	double zeta=x->zeta, gamma=x->gamma;
-	double F0 = zeta*(1-gamma)*sqrt(gamma);
-	double A = zeta*(3*gamma-1)/(2*sqrt(gamma));
-	x->p1 = F0/(1-A); // p(O)
-	x->p2 = gamma*x->fe; // p'(0)
+	for(int i=0 ; i < NMODES ; ++i) {
+		x->p1[i] = 0.0001;
+		x->p2[i] = 0;
+	}
+	x->p1tot = 0;
+	x->p2tot = 0;
 
 	x->x_in2 = floatinlet_new(&x->x_obj, &x->zeta);
 	x->x_out = outlet_new(&x->x_obj, &s_signal);
