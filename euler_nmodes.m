@@ -1,36 +1,37 @@
-function p = euler_nmodes(gamma,ksi,time,n)
+function p = euler_nmodes(gamma,zeta,time,n)
     fe = 44100;
     Te = 1/fe;
     
     l = 0.660;
-    r = 0.015;
+    r = 0.007;
     
     [Fn,Yn,fn,~] = impedance_cyl(l,r);
+    Fn = Fn(1:n);
+    Yn = Yn(1:n);
+    fn = fn(1:n);
 
-    F0 = ksi*(1-gamma)*sqrt(gamma);
-    A = ksi*(3*gamma-1)/(2*sqrt(gamma));
-    B = -ksi*(3*gamma+1)/(8*gamma.^(3/2));
-    C = -ksi*(gamma+1)/(16*gamma.^(5/2));
+    F0 = zeta*(1-gamma)*sqrt(gamma);
+    A = zeta*(3*gamma-1)/(2*sqrt(gamma));
+    B = -zeta*(3*gamma+1)/(8*gamma.^(3/2));
+    C = -zeta*(gamma+1)/(16*gamma.^(5/2));
     
-    p_0 = F0/(1-A);
-    dp_0 = 0;
-    p_1 = p_0 + Te*dp_0;
-    p_mod = zeros(time*fe,n);
-    p_tot = zeros(time*fe,2);
-
-    p_mod(1,:) = p_0/n;
-    p_mod(2,:) = p_1/n;
-
-    for i=3:time*fe
-        p_tot(i-2,1) = sum(p_mod(i-2,:));
-        p_tot(i-2,2) = 1/Te*sum(p_mod(i-1,:)-p_mod(i-2,:));
+    pn1 = zeros(time*fe,n); % pn(t)
+    pn2 = pn1; % pn'(t)
+    pn1(1,:) = 0.0001; % initialization
+    
+    p1tot = zeros(time*fe,1); % p(t) total
+    p2tot = p1tot; % p'(t) total
+    
+    for i = 1:time*fe-1
+        p1tot(i) = sum(pn1(i,:));
+        p2tot(i) = sum(pn2(i,:));
         for j = 1:n
-            p_mod(i,j) = 2*p_mod(i-1,j) - p_mod(i-2,j) ...
-                - Te*Fn(j)*Yn(j)*(p_mod(i-1,j)-p_mod(i-2,j)) ...
-                + Fn(j)*Te^2*p_tot(i-2,2)*(A+2*B*p_tot(i-2,1) ...
-                + 3*C*p_tot(i-2,1)^2)-(Te*2*pi*fn(j))^2*p_mod(i-2,j);
+            pn1(i+1,j) = pn1(i,j) + Te*pn2(i,j);
+            pn2(i+1,j) = pn2(i,j) - Te*(Fn(j)*(Yn(j)*pn2(i,j) ...
+                                         -p2tot(i)*(A+2*B*p1tot(i)+3*C*p1tot(i)^2)) ...
+                                         +(2*pi*fn(j))^2*pn1(i,j));
         end
     end
     
-    p = p_tot(:,1);
+    p = p1tot/n;
 end
