@@ -11,7 +11,7 @@
 #define NMIDIMAX 95 // limite midi haute clarinette
 #define NMIDI NMIDIMAX-NMIDIMIN // total midi notes
 #define DISCR 60000 // size of arrays in impedance_cyl
-#define NMODES 10 // number of modes
+#define NMODES 4 // number of modes
 
 static t_class *modelTrap_tilde_class;
 
@@ -20,6 +20,7 @@ typedef struct // structure to hold the returns of impedance_cyl
     double Fn [DISCR];
     double Yn [DISCR];
     double fn [DISCR];
+    int pe;
     //double complex Ze [DISCR];
 }cylinder_params;
 
@@ -58,16 +59,21 @@ t_int *modelTrap_tilde_perform(t_int *w)
 	int n = (int)(w[3]);
 
 	int note;
-	if(x->note < 45) note = 45;
-	else if (x->note > 95) note = 95;
+	if(x->note < NMIDIMIN) note = NMIDIMIN;
+	else if (x->note > NMIDIMAX-1) note = NMIDIMAX-1;
 	else note = x->note;
 	note = note-NMIDIMIN;
+
+	int useMode = fmin(NMODES, x->Cyl[note].pe); // for midi notes with too few modes
+	char str[80];
+    sprintf(str, "%d", useMode); // print number of modes
+	post(str);
 
     double p1_old [NMODES], p2_old [NMODES];
     double fp2i [NMODES] = { 0 }, p1_temp [NMODES], p2_temp [NMODES];
     double p1_temptot = 0, p2_temptot = 0;
     double Te = 1./x->fe;
-    for(int k=0 ; k<NMODES ; k++) {
+    for(int k=0 ; k<useMode ; k++) {
     	p1_old[k] = x->p1[k];
     	p2_old[k] = x->p2[k];
     }
@@ -82,7 +88,7 @@ t_int *modelTrap_tilde_perform(t_int *w)
     	double B = -zeta_interp*(3*gamma_interp+1)/(8*pow(gamma_interp,3./2));
     	double C = -zeta_interp*(gamma_interp+1)/(16*pow(gamma_interp,5./2));
 
-        for(int j=0 ; j<NMODES ; j++) {
+        for(int j=0 ; j<useMode ; j++) {
             x->p1[j] = x->p1[j] + Te*x->p2[j];
             fp2i[j] = -x->Cyl[note].Fn[j]*x->Cyl[note].Yn[j]*x->p2[j]
 	        		  +x->Cyl[note].Fn[j]*x->p2tot*(A+2*B*x->p1tot+3*C*pow(x->p1tot,2))
@@ -92,14 +98,14 @@ t_int *modelTrap_tilde_perform(t_int *w)
 
         for(int k=0 ; k<20 ; k++) {
         	// temp variables for implicit method
-            for(int j=0 ; j<NMODES ; j++) {
+            for(int j=0 ; j<useMode ; j++) {
                 p1_temp[j] = x->p1[j];
                 p2_temp[j] = x->p2[j];
                 p1_temptot += p1_temp[j];
                 p2_temptot += p2_temp[j];
             }
 
-            for(int j=0 ; j<NMODES ; j++) {
+            for(int j=0 ; j<useMode ; j++) {
                 x->p1[j] = p1_old[j] + Te/2*(p2_old[j] + p2_temp[j]);
                 x->p2[j] = p2_old[j] + Te/2*(fp2i[j]
                     						- x->Cyl[note].Fn[j]*x->Cyl[note].Yn[j]*p2_temp[j]
@@ -113,7 +119,7 @@ t_int *modelTrap_tilde_perform(t_int *w)
         x->p1tot = 0;
         x->p2tot = 0;
 
-        for(int j=0 ; j<NMODES ; j++) {
+        for(int j=0 ; j<useMode ; j++) {
     		x->p1tot += x->p1[j];
     		x->p2tot += x->p2[j];
     		p1_old[j] = x->p1[j];
@@ -160,6 +166,9 @@ void *modelTrap_tilde_new(t_floatarg f1, t_floatarg f2, t_floatarg f3)
 	for(int i=NMIDIMIN ; i<NMIDIMAX ; ++i) {
 		double freq = pow(2,(i-69)/12.)*440;
 		x->L = c/(4*freq) - 0.8*x->R;
+    	//char str[80];
+    	//sprintf(str, "i = %d", i); // print number of modes
+		//post(str);
 		x->Cyl[i-NMIDIMIN] = impedance_cyl(x->L, x->R); // calculates resonator parameters
 	}
 
@@ -249,15 +258,16 @@ cylinder_params impedance_cyl(double L, double R)
     	Fn[i] = 2*c/L;
     }
 
-    char str[80];
-    sprintf(str, "%d", pe); // print number of modes
-	post(str);
+    //char str[80];
+    //sprintf(str, "%d", pe); // print number of modes
+	//post(str);
 
     // Pass the results to a structure
     cylinder_params result;
     memcpy(result.Fn, Fn, pe*sizeof(double));
     memcpy(result.Yn, Yn, pe*sizeof(double));
     memcpy(result.fn, fn, pe*sizeof(double));
+    result.pe = pe;
     //memcpy(result.Ze, Ze, DISCR*sizeof(double complex));
     return result;
 }
