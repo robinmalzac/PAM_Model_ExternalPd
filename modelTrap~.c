@@ -65,9 +65,9 @@ t_int *modelTrap_tilde_perform(t_int *w)
 	note = note-NMIDIMIN;
 
 	int useMode = fmin(NMODES, x->Cyl[note].pe); // for midi notes with too few modes
-	char str[80];
-    sprintf(str, "%d", useMode); // print number of modes
-	post(str);
+	//char str[80];
+    //sprintf(str, "%d", useMode); // print number of modes
+	//post(str);
 
     double p1_old [NMODES], p2_old [NMODES];
     double fp2i [NMODES] = { 0 }, p1_temp [NMODES], p2_temp [NMODES];
@@ -96,7 +96,7 @@ t_int *modelTrap_tilde_perform(t_int *w)
             x->p2[j] = x->p2[j] + Te*fp2i[j];
         }
 
-        for(int k=0 ; k<20 ; k++) {
+        for(int k=0 ; k<1100 ; k++) {
         	// temp variables for implicit method
             for(int j=0 ; j<useMode ; j++) {
                 p1_temp[j] = x->p1[j];
@@ -126,6 +126,7 @@ t_int *modelTrap_tilde_perform(t_int *w)
     		p2_old[j] = x->p2[j];
     	}
 
+    	if(x->p1tot > 10000 || x->p1tot < -10000) post("Diverge !");
         out[i] = x->p1tot;
 	}
 
